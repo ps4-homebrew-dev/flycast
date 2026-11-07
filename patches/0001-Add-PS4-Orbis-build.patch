@@ -77,8 +77,8 @@ index 0000000..418b74a
 +
 +orbis_add_pkg(${PROJECT_NAME}
 +	TITLE Flycast
-+	TITLE_ID FLYC00001
-+	VERSION 1.00
++	TITLE_ID FLYH00001
++	VERSION 2.70
 +	# 0x2 | 0x10000 (7 CPU mode) | 0x800000 (PS4 Pro mode)
 +	ATTRIBUTE 8454146
 +	ASSETS sce_sys
