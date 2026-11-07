@@ -1,0 +1,43 @@
+From 1f58cdb5eb0dc11dee92495a900a77b54ae0b77f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?John=20T=C3=B6rnblom?= <john.tornblom@gmail.com>
+Date: Fri, 6 Nov 2026 22:33:07 +0000
+Subject: [PATCH 3/5] rec-x64: look up the next block in the main loop
+
+When the MMU is off, read the FPCB entry directly instead of calling
+bm_GetCodeByVAddr() after every block. On the PS4's CPU this call took
+about a fifth of the emulation thread's time.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EVpxQm2qgi1H2nU3iig9Gg
+---
+ core/rec-x64/rec_x64.cpp | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/core/rec-x64/rec_x64.cpp b/core/rec-x64/rec_x64.cpp
+index b78ffc9..3ef077e 100644
+--- a/core/rec-x64/rec_x64.cpp
++++ b/core/rec-x64/rec_x64.cpp
+@@ -700,8 +700,20 @@ public:
+ 		L(slice_loop);
+ 		mov(rax, (size_t)&sh4ctx.pc);
+ 		mov(call_regs[0], dword[rax]);
++		Xbyak::Label mmuLookup, blockDone;
++		mov(rax, (size_t)&mmuOn);
++		cmp(byte[rax], 0);
++		jne(mmuLookup);
++		// FPCA(pc) inlined
++		mov(eax, call_regs[0]);
++		and_(eax, FPCB_MASK << 1);
++		mov(rdx, (size_t)&sh4ctx - offsetof(Sh4RCB, cntx) + offsetof(Sh4RCB, fpcb));
++		call(qword[rdx + rax * 4]);
++		jmp(blockDone);
++		L(mmuLookup);
+ 		call(bm_GetCodeByVAddr);
+ 		call(rax);
++		L(blockDone);
+ 		mov(rax, (uintptr_t)&sh4ctx.cycle_counter);
+ 		mov(ecx, dword[rax]);
+ 		test(ecx, ecx);
+-- 
+2.43.0
+

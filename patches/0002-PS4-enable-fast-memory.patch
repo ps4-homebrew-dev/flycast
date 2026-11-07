@@ -1,0 +1,118 @@
+From f6b2863a84bea892deae8a7a40cb189aa2a949f7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?John=20T=C3=B6rnblom?= <john.tornblom@gmail.com>
+Date: Fri, 6 Nov 2026 22:28:27 +0000
+Subject: [PATCH 2/5] PS4: enable fast memory
+
+The PS4 kernel refuses large PROT_NONE anonymous mappings, so reserve the
+address space with sceKernelReserveVirtualRange() instead. mprotect()
+succeeds on a reserved range without mapping memory, so the SH4 context
+and FPCB pages are mapped explicitly.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EVpxQm2qgi1H2nU3iig9Gg
+---
+ core/linux/posix_vmem.cpp | 50 +++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 50 insertions(+)
+
+diff --git a/core/linux/posix_vmem.cpp b/core/linux/posix_vmem.cpp
+index 2d42410..2da1972 100644
+--- a/core/linux/posix_vmem.cpp
++++ b/core/linux/posix_vmem.cpp
+@@ -51,9 +51,26 @@ static int ashmem_create_region(const char *name, size_t size)
+ }
+ #endif  // #ifdef __ANDROID__
+ 
++#ifdef __ORBIS__
++extern "C" int sceKernelReserveVirtualRange(void **addr, size_t len, int flags, size_t alignment);
++#define SCE_KERNEL_MAP_FIXED 0x10
++#endif
++
+ namespace virtmem
+ {
+ 
++#ifdef __ORBIS__
++// Large PROT_NONE mappings fail on PS4, so address space is reserved instead.
++// mprotect() doesn't map memory in a reserved range.
++static bool sceReserved;
++
++static void mapAnonymous(void *start, size_t len)
++{
++	void *p = mmap(start, len, PROT_READ | PROT_WRITE, MAP_FIXED | MAP_PRIVATE | MAP_ANON, -1, 0);
++	verify(p == start);
++}
++#endif
++
+ bool region_lock(void *start, size_t len)
+ {
+ 	size_t inpage = (uintptr_t)start & PAGE_MASK;
+@@ -91,6 +108,14 @@ static void *mem_region_reserve(void *start, size_t len)
+ 	void *p = mmap(start, len, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
+ 	if (p == MAP_FAILED)
+ 	{
++#ifdef __ORBIS__
++		p = start;
++		if (sceKernelReserveVirtualRange(&p, len, start != NULL ? SCE_KERNEL_MAP_FIXED : 0, 0x10000) == 0)
++		{
++			sceReserved = true;
++			return p;
++		}
++#endif
+ 		perror("mmap");
+ 		return NULL;
+ 	}
+@@ -100,6 +125,9 @@ static void *mem_region_reserve(void *start, size_t len)
+ 
+ static bool mem_region_release(void *start, size_t len)
+ {
++#ifdef __ORBIS__
++	sceReserved = false;
++#endif
+ 	return munmap(start, len) == 0;
+ }
+ 
+@@ -185,6 +213,11 @@ bool init(void **vmem_base_addr, void **sh4rcb_addr, size_t ramSize)
+ 	void *sh4rcb_base_ptr  = (void*)(ptrint + fpcb_size);
+ 
+ 	// Now map the memory for the SH4 context, do not include FPCB on purpose (paged on demand).
++#ifdef __ORBIS__
++	if (sceReserved)
++		mapAnonymous(sh4rcb_base_ptr, sizeof(Sh4RCB) - fpcb_size);
++	else
++#endif
+ 	region_unlock(sh4rcb_base_ptr, sizeof(Sh4RCB) - fpcb_size);
+ 
+ 	return true;
+@@ -207,6 +240,16 @@ void destroy()
+ 
+ // Resets a chunk of memory by deleting its data and setting its protection back.
+ void reset_mem(void *ptr, unsigned size_bytes) {
++#ifdef __ORBIS__
++	if (sceReserved)
++	{
++		munmap(ptr, size_bytes);
++		void *p = ptr;
++		int rc = sceKernelReserveVirtualRange(&p, size_bytes, SCE_KERNEL_MAP_FIXED, 0);
++		verify(rc == 0);
++		return;
++	}
++#endif
+ 	// Mark them as non accessible.
+ 	mprotect(ptr, size_bytes, PROT_NONE);
+ 	// Tell the kernel to flush'em all (FIXME: perhaps unmap+mmap 'd be better?)
+@@ -220,6 +263,13 @@ void reset_mem(void *ptr, unsigned size_bytes) {
+ 
+ // Allocates a bunch of memory (page aligned and page-sized)
+ void ondemand_page(void *address, unsigned size_bytes) {
++#ifdef __ORBIS__
++	if (sceReserved)
++	{
++		mapAnonymous(address, size_bytes);
++		return;
++	}
++#endif
+ 	bool rc = region_unlock(address, size_bytes);
+ 	verify(rc);
+ }
+-- 
+2.43.0
+

@@ -1,0 +1,79 @@
+From 6b02bd1b310676742d4f21c53ee13f9db6b4d62c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?John=20T=C3=B6rnblom?= <john.tornblom@gmail.com>
+Date: Fri, 6 Nov 2026 22:33:08 +0000
+Subject: [PATCH 4/5] rec-x64: native FIPR and FTRV
+
+Avoids a call to the canonical implementations, and saving and restoring
+the allocated xmm registers around it. The results are bit-identical:
+products and sums are computed in double precision, in the same order.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EVpxQm2qgi1H2nU3iig9Gg
+---
+ core/rec-x64/rec_x64.cpp | 50 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 50 insertions(+)
+
+diff --git a/core/rec-x64/rec_x64.cpp b/core/rec-x64/rec_x64.cpp
+index 3ef077e..0910ac9 100644
+--- a/core/rec-x64/rec_x64.cpp
++++ b/core/rec-x64/rec_x64.cpp
+@@ -389,6 +389,56 @@ public:
+ 				}
+ 				break;
+ 
++			// Same results as the canonical implementations: products and sums in double precision,
++			// summed in the same order.
++			case shop_fipr:
++				mov(rax, (uintptr_t)op.rs1.reg_ptr(sh4ctx));
++				mov(rcx, (uintptr_t)op.rs2.reg_ptr(sh4ctx));
++				cvtps2pd(xmm0, qword[rax]);
++				cvtps2pd(xmm1, qword[rax + 8]);
++				cvtps2pd(xmm2, qword[rcx]);
++				cvtps2pd(xmm3, qword[rcx + 8]);
++				mulpd(xmm0, xmm2);
++				mulpd(xmm1, xmm3);
++				movapd(xmm2, xmm0);
++				unpckhpd(xmm2, xmm2);
++				addsd(xmm0, xmm2);
++				addsd(xmm0, xmm1);
++				unpckhpd(xmm1, xmm1);
++				addsd(xmm0, xmm1);
++				cvtsd2ss(xmm0, xmm0);
++				host_reg_to_shil_param(op.rd, xmm0);
++				break;
++
++			case shop_ftrv:
++				mov(rax, (uintptr_t)op.rs1.reg_ptr(sh4ctx));
++				mov(rcx, (uintptr_t)op.rs2.reg_ptr(sh4ctx));
++				cvtps2pd(xmm4, qword[rax]);
++				cvtps2pd(xmm5, qword[rax + 8]);
++				for (int i = 0; i < 2; i++)
++				{
++					const Xbyak::Xmm& sum = i == 0 ? xmm2 : xmm3;
++					for (int j = 0; j < 4; j++)
++					{
++						movapd(xmm0, j < 2 ? xmm4 : xmm5);
++						if (j & 1)
++							unpckhpd(xmm0, xmm0);
++						else
++							unpcklpd(xmm0, xmm0);
++						cvtps2pd(xmm1, qword[rcx + j * 16 + i * 8]);
++						mulpd(xmm1, xmm0);
++						if (j == 0)
++							movapd(sum, xmm1);
++						else
++							addpd(sum, xmm1);
++					}
++					cvtpd2ps(sum, sum);
++				}
++				movlhps(xmm2, xmm3);
++				mov(rax, (uintptr_t)op.rd.reg_ptr(sh4ctx));
++				movups(xword[rax], xmm2);
++				break;
++
+ 			case shop_frswap:
+ 				mov(rax, (uintptr_t)op.rs1.reg_ptr(sh4ctx));
+ 				mov(rcx, (uintptr_t)op.rd.reg_ptr(sh4ctx));
+-- 
+2.43.0
+

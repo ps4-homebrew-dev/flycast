@@ -1,0 +1,88 @@
+From 4dc20105c3f3e438597ba59c786f6dd9046b8475 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?John=20T=C3=B6rnblom?= <john.tornblom@gmail.com>
+Date: Fri, 6 Nov 2026 22:27:57 +0000
+Subject: [PATCH 1/5] Add PS4 (Orbis) build
+
+Builds with the PS4 homebrew SDK (https://github.com/ps4-homebrew-dev/sdk)
+and packages a pkg with orbis_add_pkg(). User files go to /data/flycast.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01EVpxQm2qgi1H2nU3iig9Gg
+---
+ CMakeLists.txt             | 10 ++++++++--
+ core/linux-dist/main.cpp   |  6 ++++++
+ shell/orbis/CMakeLists.txt | 10 ++++++++++
+ 3 files changed, 24 insertions(+), 2 deletions(-)
+ create mode 100644 shell/orbis/CMakeLists.txt
+
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index fee2357..328f460 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -328,7 +328,9 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
+ 		$<$<BOOL:${WINDOWS_STORE}>:_WIN32_WINNT=0x0A00>
+ 		$<$<OR:$<BOOL:${MINGW}>,$<BOOL:${MSVC}>>:_USE_MATH_DEFINES>)
+ 
+-if(UNIX AND NOT ANDROID AND NOT APPLE)
++if(ORBIS)
++	target_compile_definitions(${PROJECT_NAME} PRIVATE PAGE_SIZE=16384)
++elseif(UNIX AND NOT ANDROID AND NOT APPLE)
+ 	execute_process(COMMAND getconf PAGESIZE OUTPUT_VARIABLE PAGE_SIZE OUTPUT_STRIP_TRAILING_WHITESPACE)
+ 	target_compile_definitions(${PROJECT_NAME} PRIVATE PAGE_SIZE=${PAGE_SIZE})
+ endif()
+@@ -499,7 +501,7 @@ if(NOT LIBRETRO)
+ 	endif()
+ 
+ 	if(NOT ANDROID AND NOT IOS)
+-		if (NOT NINTENDO_SWITCH)
++		if (NOT NINTENDO_SWITCH AND NOT ORBIS)
+ 			# DreamLink enabled for non-mobile Linux, MacOS, and Windows
+ 			target_compile_definitions(${PROJECT_NAME} PRIVATE USE_DREAMLINK_DEVICES=1)
+ 			set(USE_DREAMLINK_DEVICES ON) # Must be set before adding core/sdl
+@@ -1535,6 +1537,10 @@ if(NINTENDO_SWITCH)
+ 	endif()
+ endif()
+ 
++if(ORBIS AND NOT LIBRETRO)
++	add_subdirectory(shell/orbis)
++endif()
++
+ if(IOS)
+ 	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>-${CMAKE_OSX_SYSROOT}/Flycast.ipa" TYPE BIN)
+ elseif(NINTENDO_SWITCH AND NOT LIBRETRO)
+diff --git a/core/linux-dist/main.cpp b/core/linux-dist/main.cpp
+index cace4bc..bfaf2a0 100644
+--- a/core/linux-dist/main.cpp
++++ b/core/linux-dist/main.cpp
+@@ -242,6 +242,12 @@ int main(int argc, char* argv[])
+ 	LogManager::Init();
+ 	i18n::init();
+ 
++#ifdef __ORBIS__
++	// No home directory on PS4. /data is writable and persistent.
++	setenv("XDG_CONFIG_HOME", "/data", 0);
++	setenv("XDG_DATA_HOME", "/data", 0);
++	setenv("XDG_CACHE_HOME", "/data", 0);
++#endif
+ 	// Set directories
+ 	set_user_config_dir(find_user_config_dir());
+ 	set_user_data_dir(find_user_data_dir());
+diff --git a/shell/orbis/CMakeLists.txt b/shell/orbis/CMakeLists.txt
+new file mode 100644
+index 0000000..418b74a
+--- /dev/null
++++ b/shell/orbis/CMakeLists.txt
+@@ -0,0 +1,10 @@
++pkg_check_modules(EGL REQUIRED egl)
++
++orbis_add_pkg(${PROJECT_NAME}
++	TITLE Flycast
++	TITLE_ID FLYC00001
++	VERSION 1.00
++	# 0x2 | 0x10000 (7 CPU mode) | 0x800000 (PS4 Pro mode)
++	ATTRIBUTE 8454146
++	ASSETS sce_sys
++	MODULES libEGL.so.1 libGL.so.1 libgallium-${EGL_VERSION}.so libvulkan.so.1)
+-- 
+2.43.0
+
