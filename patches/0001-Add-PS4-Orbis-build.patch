@@ -4,7 +4,7 @@ Date: Fri, 6 Nov 2026 22:27:57 +0000
 Subject: [PATCH 1/5] Add PS4 (Orbis) build
 
 Builds with the PS4 homebrew SDK (https://github.com/ps4-homebrew-dev/sdk)
-and packages a pkg with orbis_add_pkg(). User files go to /data/flycast.
+and packages a pkg with orbis_add_pkg().
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01EVpxQm2qgi1H2nU3iig9Gg
@@ -59,10 +59,10 @@ index cace4bc..bfaf2a0 100644
  	i18n::init();
  
 +#ifdef __ORBIS__
-+	// No home directory on PS4. /data is writable and persistent.
-+	setenv("XDG_CONFIG_HOME", "/data", 0);
-+	setenv("XDG_DATA_HOME", "/data", 0);
-+	setenv("XDG_CACHE_HOME", "/data", 0);
++	// No home directory on PS4. /temp0 is writable.
++	setenv("XDG_CONFIG_HOME", "/temp0", 0);
++	setenv("XDG_DATA_HOME", "/temp0", 0);
++	setenv("XDG_CACHE_HOME", "/temp0", 0);
 +#endif
  	// Set directories
  	set_user_config_dir(find_user_config_dir());
