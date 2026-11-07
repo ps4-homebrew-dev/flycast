@@ -3,6 +3,7 @@
 A port of [Flycast](https://github.com/flyinghead/flycast), the Sega Dreamcast,
 Naomi and Atomiswave emulator, to the PS4. This repository holds the patches
 against upstream Flycast, the package assets, and a script that builds the pkg.
+Tested on PS4 Pro and PS5.
 
 ## Download
 Prebuilt pkgs are on the [releases](https://github.com/ps4-homebrew-dev/flycast/releases) page.
