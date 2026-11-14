@@ -27,3 +27,8 @@ pkg next to `build.sh`. Set `FLYCAST_VER` to build another Flycast revision.
 - On a PS4 Pro, Flycast runs in Pro mode.
 - Settings and saves are stored in `/temp0/flycast`.
 - Put your games on USB
+
+## License
+The patches and scripts here are under the same license as Flycast, the
+GNU General Public License version 2 or (at your option) any later version,
+see [LICENSE](LICENSE).
