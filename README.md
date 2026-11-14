@@ -25,7 +25,8 @@ pkg next to `build.sh`. Set `FLYCAST_VER` to build another Flycast revision.
 ## Notes
 - Use the Vulkan renderer.
 - On a PS4 Pro, Flycast runs in Pro mode.
-- Settings and saves are stored in `/temp0/flycast`.
+- Settings and saves are stored in `/download0` (`.config/flycast` and
+  `.data/flycast`). Earlier versions used `/temp0`, which is not carried over.
 - Put your games on USB
 
 ## License

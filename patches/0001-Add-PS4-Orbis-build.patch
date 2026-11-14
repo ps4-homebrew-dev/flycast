@@ -1,18 +1,21 @@
-From 4dc20105c3f3e438597ba59c786f6dd9046b8475 Mon Sep 17 00:00:00 2001
+From 15aea9e46a2bc684ca4a701073ee17fff3deb1da Mon Sep 17 00:00:00 2001
 From: =?UTF-8?q?John=20T=C3=B6rnblom?= <john.tornblom@gmail.com>
 Date: Fri, 6 Nov 2026 22:27:57 +0000
 Subject: [PATCH 1/5] Add PS4 (Orbis) build
 
 Builds with the PS4 homebrew SDK (https://github.com/ps4-homebrew-dev/sdk)
-and packages a pkg with orbis_add_pkg().
+and packages a pkg with orbis_add_pkg(). Settings, saves and states are in
+the title's download data, /download0 (1 GiB), which SDL2main mounts and
+which persists across reboots. Mesa's shader cache, in the download data
+too, is held to 256 MiB, so that it cannot fill it.
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01EVpxQm2qgi1H2nU3iig9Gg
 ---
  CMakeLists.txt             | 10 ++++++++--
- core/linux-dist/main.cpp   |  6 ++++++
- shell/orbis/CMakeLists.txt | 10 ++++++++++
- 3 files changed, 24 insertions(+), 2 deletions(-)
+ core/linux-dist/main.cpp   | 11 +++++++++++
+ shell/orbis/CMakeLists.txt | 12 ++++++++++++
+ 3 files changed, 31 insertions(+), 2 deletions(-)
  create mode 100644 shell/orbis/CMakeLists.txt
 
 diff --git a/CMakeLists.txt b/CMakeLists.txt
@@ -51,28 +54,33 @@ index fee2357..328f460 100644
  	install(FILES "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>-${CMAKE_OSX_SYSROOT}/Flycast.ipa" TYPE BIN)
  elseif(NINTENDO_SWITCH AND NOT LIBRETRO)
 diff --git a/core/linux-dist/main.cpp b/core/linux-dist/main.cpp
-index cace4bc..bfaf2a0 100644
+index cace4bc..a173f79 100644
 --- a/core/linux-dist/main.cpp
 +++ b/core/linux-dist/main.cpp
-@@ -242,6 +242,12 @@ int main(int argc, char* argv[])
+@@ -242,6 +242,17 @@ int main(int argc, char* argv[])
  	LogManager::Init();
  	i18n::init();
  
 +#ifdef __ORBIS__
-+	// No home directory on PS4. /temp0 is writable.
-+	setenv("XDG_CONFIG_HOME", "/temp0", 0);
-+	setenv("XDG_DATA_HOME", "/temp0", 0);
-+	setenv("XDG_CACHE_HOME", "/temp0", 0);
++	// No home directory on PS4. SDL2main puts the XDG directories in the
++	// download data, /download0, which persists across reboots; these are
++	// for when it did not.
++	setenv("XDG_CONFIG_HOME", "/download0", 0);
++	setenv("XDG_DATA_HOME", "/download0", 0);
++	setenv("XDG_CACHE_HOME", "/download0", 0);
++	// Mesa's shader cache is in the download data too, and may grow to 1 GiB
++	// by default: keep room for the saves.
++	setenv("MESA_SHADER_CACHE_MAX_SIZE", "256M", 0);
 +#endif
  	// Set directories
  	set_user_config_dir(find_user_config_dir());
  	set_user_data_dir(find_user_data_dir());
 diff --git a/shell/orbis/CMakeLists.txt b/shell/orbis/CMakeLists.txt
 new file mode 100644
-index 0000000..418b74a
+index 0000000..45e2258
 --- /dev/null
 +++ b/shell/orbis/CMakeLists.txt
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,12 @@
 +pkg_check_modules(EGL REQUIRED egl)
 +
 +orbis_add_pkg(${PROJECT_NAME}
@@ -81,6 +89,8 @@ index 0000000..418b74a
 +	VERSION 2.70
 +	# 0x2 | 0x10000 (7 CPU mode) | 0x800000 (PS4 Pro mode)
 +	ATTRIBUTE 8454146
++	# The download data, /download0 (MiB): settings, saves and states.
++	DOWNLOAD_DATA_SIZE 1024
 +	ASSETS sce_sys
 +	MODULES libEGL.so.1 libGL.so.1 libgallium-${EGL_VERSION}.so libvulkan.so.1)
 -- 
